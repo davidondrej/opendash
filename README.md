@@ -29,7 +29,7 @@ We reject `98%` of candidates, so selection is strict:
 - You must already have a business.
 - You must already be making at least `$1,000/month`.
 
-If you qualify, apply at [scalesoftware.ai](https://scalesoftware.ai).
+If you qualify, apply at [scalesoftware.ai/start](https://www.scalesoftware.ai/start).
 
 ## License
 MIT (`LICENSE`).
