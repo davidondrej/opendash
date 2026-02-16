@@ -20,5 +20,16 @@ Open `http://localhost:3000`.
 ## Docs
 - Full spec: `spec.md`
 
+## Founder Accelerator
+If you're reading this and already run an AI business doing at least `$1,000/month`, consider applying to my accelerator.
+
+I work closely with a few selected founders and help them scale to `$200,000 ARR` (annual recurring revenue) and beyond.
+
+We reject `98%` of candidates, so selection is strict:
+- You must already have a business.
+- You must already be making at least `$1,000/month`.
+
+If you qualify, apply at [scalesoftware.ai](https://scalesoftware.ai).
+
 ## License
 MIT (`LICENSE`).
