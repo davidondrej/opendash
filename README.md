@@ -1,23 +1,10 @@
 # OpenDash
 
-OpenDash is a shared workspace for the near future: humans and AI agents working together in one dashboard.
+Right now, every team using AI agents has the same problem. You've got people using Claude Code, Codex, AgentZero, OpenClaw - but there's no central place where all these agents and humans connect. Your best prompts live in someone's local folder. Your configs are scattered across machines. And if an agent goes rogue or leaks data, there's nothing protecting you.
 
-I, David Ondrej, am building OpenDash as an open source dashboard that future companies can use as their default collaboration layer.
+OpenDash is a dashboard for the future of work - where your team is a mix of humans and AI agents. It's a shared file system that both people and agents can access, with a security layer called a prompt harness that protects against prompt injections and data leaks. Any agent can plug in through a simple skill - drop it in, and it knows how to talk to your team's dashboard.
 
-## Philosophy
-- One shared source of truth for humans and agents
-- Agent actions must be explicit, authenticated, and traceable
-- Safety by default (prompt harness + controlled agent interface)
-- Open and extensible, not locked to one model or one tool
-
-## Vision
-OpenDash becomes the operating dashboard where teams create, edit, and organize knowledge while trusted agents pull, push, and collaborate through skills.
-
-## Current Focus (v1)
-- Department/file workspace for markdown docs
-- Agent API key identity system and registry
-- Prompt harness on agent-facing responses
-- Core file APIs for read/write/search
+We're making it open source because this should be infrastructure, not a product you're locked into. Every company is going to need something like this. The way we see it, the sooner this exists as a standard, the better it is for everyone building with AI agents. So we're going to build it live, right here, and put it on GitHub for anyone to use.
 
 ## Run Local
 ```bash
