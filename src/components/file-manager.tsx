@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileManagerSidebar, FileManagerWorkspace } from "@/components/file-manager-sections";
+import { FileEditorModal, FileManagerExplorer, FileUploadInput } from "@/components/file-manager-sections";
 import {
   defaultDraftContent,
   FileRecord,
@@ -11,7 +11,6 @@ import {
   isMarkdownFileName,
   isSystemFileName,
   markerFileNameForFolder,
-  markdownToHtml,
   normalizeFolderId,
   storedNameForFolder,
   visibleNameFromStoredName,
@@ -22,15 +21,22 @@ type FileManagerProps = {
 };
 
 export default function FileManager({ initialFiles }: FileManagerProps) {
+  const initialVisibleCount = initialFiles.filter((file) => !isSystemFileName(file.name)).length;
+
   const [files, setFiles] = useState<FileRecord[]>(initialFiles);
   const [selectedFolder, setSelectedFolder] = useState("general");
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [editorName, setEditorName] = useState("new-file.md");
-  const [editorContent, setEditorContent] = useState(defaultDraftContent("General"));
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState(`Loaded ${initialFiles.length} file(s).`);
-  const [isDraft, setIsDraft] = useState(true);
+  const [status, setStatus] = useState(`Loaded ${initialVisibleCount} file(s).`);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalIsDraft, setModalIsDraft] = useState(true);
+  const [modalFileId, setModalFileId] = useState<string | null>(null);
+  const [modalFolderId, setModalFolderId] = useState("general");
+  const [modalFileName, setModalFileName] = useState("new-file.md");
+  const [modalFileContent, setModalFileContent] = useState(defaultDraftContent("General"));
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const dateFormatter = useMemo(
@@ -53,15 +59,17 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     [files],
   );
 
-  const visibleFiles = useMemo(
-    () => sortedFiles.filter((file) => !isSystemFileName(file.name)),
-    [sortedFiles],
-  );
+  const visibleFiles = useMemo(() => sortedFiles.filter((file) => !isSystemFileName(file.name)), [sortedFiles]);
 
-  const folderFiles = useMemo(
-    () => visibleFiles.filter((file) => folderFromFileName(file.name) === selectedFolder),
-    [selectedFolder, visibleFiles],
-  );
+  const filesByFolder = useMemo(() => {
+    const grouped: Record<string, FileRecord[]> = {};
+    for (const file of visibleFiles) {
+      const folderId = folderFromFileName(file.name);
+      if (!grouped[folderId]) grouped[folderId] = [];
+      grouped[folderId].push(file);
+    }
+    return grouped;
+  }, [visibleFiles]);
 
   const sortedFolders = useMemo<FolderSummary[]>(() => {
     const markdownCounts = new Map<string, number>();
@@ -80,24 +88,10 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
         count: markdownCounts.get(folderId) ?? 0,
       }))
       .sort((a, b) => {
-        if (b.count !== a.count) {
-          return b.count - a.count;
-        }
+        if (b.count !== a.count) return b.count - a.count;
         return a.folder.label.localeCompare(b.folder.label);
       });
   }, [files]);
-
-  const selectedFolderLabel = useMemo(
-    () => sortedFolders.find((entry) => entry.folder.id === selectedFolder)?.folder.label ?? "General",
-    [selectedFolder, sortedFolders],
-  );
-
-  const activeFile = useMemo(
-    () => files.find((file) => file.id === selectedFileId) ?? null,
-    [files, selectedFileId],
-  );
-
-  const previewHtml = useMemo(() => markdownToHtml(editorContent), [editorContent]);
 
   useEffect(() => {
     if (!sortedFolders.some((entry) => entry.folder.id === selectedFolder)) {
@@ -127,30 +121,12 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     }
   }, []);
 
-  function openFile(file: FileRecord) {
-    setSelectedFileId(file.id);
-    setEditorName(visibleNameFromStoredName(file.name));
-    setEditorContent(file.content);
-    setSelectedFolder(folderFromFileName(file.name));
-    setIsDraft(false);
-    setStatus(`Opened ${visibleNameFromStoredName(file.name)}.`);
-  }
-
-  function startNewFile() {
-    const folderLabel = folderLabelFromId(selectedFolder);
-    setSelectedFileId(null);
-    setEditorName("new-file.md");
-    setEditorContent(defaultDraftContent(folderLabel));
-    setIsDraft(true);
-    setStatus(`New ${folderLabel} draft ready.`);
-  }
-
-  async function createFile(fileName: string, fileContent: string) {
+  async function createFile(folderId: string, fileName: string, fileContent: string) {
     const res = await fetch("/api/files", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: storedNameForFolder(fileName, selectedFolder),
+        name: storedNameForFolder(fileName, folderId),
         content: fileContent,
       }),
     });
@@ -159,12 +135,12 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     return data.file ?? null;
   }
 
-  async function updateFile(fileId: string, fileName: string, fileContent: string) {
+  async function updateFile(fileId: string, folderId: string, fileName: string, fileContent: string) {
     const res = await fetch(`/api/files/${fileId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: storedNameForFolder(fileName, selectedFolder),
+        name: storedNameForFolder(fileName, folderId),
         content: fileContent,
       }),
     });
@@ -175,15 +151,9 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
 
   async function createFolder(folderName: string) {
     const folderId = normalizeFolderId(folderName);
-    if (!folderId) {
-      throw new Error("Folder name must contain letters or numbers.");
-    }
-    if (folderId === "general") {
-      throw new Error("The general folder already exists.");
-    }
-    if (sortedFolders.some((entry) => entry.folder.id === folderId)) {
-      throw new Error("Folder already exists.");
-    }
+    if (!folderId) throw new Error("Folder name must contain letters or numbers.");
+    if (folderId === "general") throw new Error("The general folder already exists.");
+    if (sortedFolders.some((entry) => entry.folder.id === folderId)) throw new Error("Folder already exists.");
 
     const res = await fetch("/api/files", {
       method: "POST",
@@ -209,41 +179,101 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   }
 
   async function deleteStoredFile(fileId: string) {
-    const res = await fetch(`/api/files/${fileId}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(`/api/files/${fileId}`, { method: "DELETE" });
     const data = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) throw new Error(data.error ?? "Failed to delete files in folder.");
+    if (!res.ok) throw new Error(data.error ?? "Failed to delete file.");
   }
 
-  async function handleSaveFile() {
+  function openFile(file: FileRecord) {
+    const folderId = folderFromFileName(file.name);
+    setSelectedFolder(folderId);
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: false }));
+
+    setModalFileId(file.id);
+    setModalFolderId(folderId);
+    setModalFileName(visibleNameFromStoredName(file.name));
+    setModalFileContent(file.content);
+    setModalIsDraft(false);
+    setIsModalOpen(true);
+
+    setStatus(`Opened ${visibleNameFromStoredName(file.name)}.`);
+  }
+
+  function startNewFile(folderId = selectedFolder) {
+    const label = folderLabelFromId(folderId);
+    setSelectedFolder(folderId);
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: false }));
+
+    setModalFileId(null);
+    setModalFolderId(folderId);
+    setModalFileName("new-file.md");
+    setModalFileContent(defaultDraftContent(label));
+    setModalIsDraft(true);
+    setIsModalOpen(true);
+
+    setStatus(`New ${label} file ready.`);
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+  }
+
+  async function handleSaveModalFile() {
     setLoading(true);
-    setStatus(isDraft ? "Creating file..." : "Saving changes...");
+    setStatus(modalIsDraft ? "Creating file..." : "Saving file...");
+
     try {
-      if (!editorName.trim()) {
+      if (!modalFileName.trim()) {
         setStatus("File name is required.");
         return;
       }
 
       let saved: FileRecord | null = null;
-      if (isDraft || !selectedFileId) {
-        saved = await createFile(editorName, editorContent);
+      if (modalIsDraft || !modalFileId) {
+        saved = await createFile(modalFolderId, modalFileName, modalFileContent);
       } else {
-        saved = await updateFile(selectedFileId, editorName, editorContent);
+        saved = await updateFile(modalFileId, modalFolderId, modalFileName, modalFileContent);
       }
 
       await loadFiles(search);
 
       if (saved) {
-        setSelectedFileId(saved.id);
-        setEditorName(visibleNameFromStoredName(saved.name));
-        setEditorContent(saved.content);
-        setIsDraft(false);
+        const folderId = folderFromFileName(saved.name);
+        setSelectedFolder(folderId);
+        setCollapsedFolders((prev) => ({ ...prev, [folderId]: false }));
+
+        setModalFileId(saved.id);
+        setModalFolderId(folderId);
+        setModalFileName(visibleNameFromStoredName(saved.name));
+        setModalFileContent(saved.content);
+        setModalIsDraft(false);
       }
 
       setStatus("File saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Save failed.";
+      setStatus(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDeleteModalFile() {
+    if (!modalFileId) return;
+
+    const confirmed = window.confirm("Delete this file? This cannot be undone.");
+    if (!confirmed) return;
+
+    setLoading(true);
+    setStatus("Deleting file...");
+    try {
+      await deleteStoredFile(modalFileId);
+      await loadFiles(search);
+      setIsModalOpen(false);
+      setModalFileId(null);
+      setStatus("File deleted.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Delete failed.";
       setStatus(message);
     } finally {
       setLoading(false);
@@ -258,14 +288,13 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     setStatus("Uploading markdown file...");
     try {
       const text = await file.text();
-      const created = await createFile(file.name, text);
+      const created = await createFile(selectedFolder, file.name, text);
       await loadFiles(search);
+
       if (created) {
-        setSelectedFileId(created.id);
-        setEditorName(visibleNameFromStoredName(created.name));
-        setEditorContent(created.content);
-        setIsDraft(false);
+        openFile(created);
       }
+
       setStatus("Upload complete.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed.";
@@ -307,10 +336,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       const folderId = await createFolder(input);
       await loadFiles(search);
       setSelectedFolder(folderId);
-      setSelectedFileId(null);
-      setEditorName("new-file.md");
-      setEditorContent(defaultDraftContent(folderLabelFromId(folderId)));
-      setIsDraft(true);
+      setCollapsedFolders((prev) => ({ ...prev, [folderId]: false }));
       setStatus(`Created folder ${folderLabelFromId(folderId)}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create folder.";
@@ -320,21 +346,21 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     }
   }
 
-  async function handleRenameFolder() {
-    if (selectedFolder === "general") {
+  async function handleRenameFolder(folderId: string) {
+    if (folderId === "general") {
       setStatus("General folder cannot be renamed.");
       return;
     }
 
-    const nextNameInput = window.prompt("Rename folder", folderLabelFromId(selectedFolder));
+    const nextNameInput = window.prompt("Rename folder", folderLabelFromId(folderId));
     if (nextNameInput === null) return;
-    const nextFolderId = normalizeFolderId(nextNameInput);
 
+    const nextFolderId = normalizeFolderId(nextNameInput);
     if (!nextFolderId) {
       setStatus("Folder name must contain letters or numbers.");
       return;
     }
-    if (nextFolderId === selectedFolder) {
+    if (nextFolderId === folderId) {
       setStatus("Folder name is unchanged.");
       return;
     }
@@ -343,7 +369,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       return;
     }
 
-    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === selectedFolder);
+    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === folderId);
     if (!filesInFolder.length) {
       setStatus("This folder has no files to rename.");
       return;
@@ -356,8 +382,16 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
         const nextName = storedNameForFolder(visibleNameFromStoredName(file.name), nextFolderId);
         await renameStoredFile(file.id, nextName);
       }
+
       await loadFiles(search);
-      setSelectedFolder(nextFolderId);
+
+      if (selectedFolder === folderId) {
+        setSelectedFolder(nextFolderId);
+      }
+      if (modalFolderId === folderId) {
+        setModalFolderId(nextFolderId);
+      }
+
       setStatus(`Renamed folder to ${folderLabelFromId(nextFolderId)}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to rename folder.";
@@ -367,20 +401,18 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     }
   }
 
-  async function handleDeleteFolder() {
-    if (selectedFolder === "general") {
+  async function handleDeleteFolder(folderId: string) {
+    if (folderId === "general") {
       setStatus("General folder cannot be deleted.");
       return;
     }
 
-    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === selectedFolder);
+    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === folderId);
     const userFilesInFolder = filesInFolder.filter((file) => !isSystemFileName(file.name));
     const confirmed = window.confirm(
-      `Delete folder "${folderLabelFromId(selectedFolder)}" and ${userFilesInFolder.length} file(s)? This cannot be undone.`,
+      `Delete folder "${folderLabelFromId(folderId)}" and ${userFilesInFolder.length} file(s)? This cannot be undone.`,
     );
     if (!confirmed) return;
-
-    const deletedSelectedFile = filesInFolder.some((file) => file.id === selectedFileId);
 
     setLoading(true);
     setStatus("Deleting folder...");
@@ -388,15 +420,19 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       for (const file of filesInFolder) {
         await deleteStoredFile(file.id);
       }
+
       await loadFiles(search);
-      setSelectedFolder("general");
-      if (deletedSelectedFile) {
-        setSelectedFileId(null);
-        setEditorName("new-file.md");
-        setEditorContent(defaultDraftContent("General"));
-        setIsDraft(true);
+
+      if (selectedFolder === folderId) {
+        setSelectedFolder("general");
       }
-      setStatus(`Deleted folder ${folderLabelFromId(selectedFolder)}.`);
+
+      if (modalFolderId === folderId) {
+        setIsModalOpen(false);
+        setModalFileId(null);
+      }
+
+      setStatus(`Deleted folder ${folderLabelFromId(folderId)}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete folder.";
       setStatus(message);
@@ -405,44 +441,57 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     }
   }
 
+  function handleSelectFolder(folderId: string) {
+    setSelectedFolder(folderId);
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: false }));
+  }
+
+  function handleToggleFolder(folderId: string) {
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  }
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <main className="mx-auto grid min-h-screen w-full max-w-[1540px] gap-3 p-3 lg:grid-cols-[300px_1fr] lg:gap-4 lg:p-4">
-        <FileManagerSidebar
+      <main className="mx-auto w-full max-w-[1380px] p-3 lg:p-4">
+        <FileUploadInput onUploadPickedFile={handleUploadPickedFile} fileInputRef={fileInputRef} />
+
+        <FileManagerExplorer
           sortedFolders={sortedFolders}
+          filesByFolder={filesByFolder}
           selectedFolder={selectedFolder}
-          selectedFolderLabel={selectedFolderLabel}
-          folderFiles={folderFiles}
-          selectedFileId={selectedFileId}
           search={search}
           loading={loading}
+          status={status}
+          collapsedFolders={collapsedFolders}
           dateFormatter={dateFormatter}
           onSetSearch={setSearch}
           onSearch={handleSearch}
-          onSelectFolder={setSelectedFolder}
-          onOpenFile={openFile}
+          onRefresh={handleRefresh}
+          onSelectFolder={handleSelectFolder}
+          onToggleFolder={handleToggleFolder}
           onCreateFolder={handleCreateFolder}
           onRenameFolder={handleRenameFolder}
           onDeleteFolder={handleDeleteFolder}
+          onCreateFile={startNewFile}
+          onOpenFile={openFile}
+          onClickUpload={() => fileInputRef.current?.click()}
         />
 
-        <FileManagerWorkspace
-          selectedFolderLabel={selectedFolderLabel}
+        <FileEditorModal
+          isOpen={isModalOpen}
           loading={loading}
-          isDraft={isDraft}
-          editorName={editorName}
-          editorContent={editorContent}
-          activeFile={activeFile}
-          previewHtml={previewHtml}
           status={status}
-          fileInputRef={fileInputRef}
-          onStartNewFile={startNewFile}
-          onClickUpload={() => fileInputRef.current?.click()}
-          onUploadPickedFile={handleUploadPickedFile}
-          onSaveFile={handleSaveFile}
-          onRefresh={handleRefresh}
-          onEditorNameChange={setEditorName}
-          onEditorContentChange={setEditorContent}
+          sortedFolders={sortedFolders}
+          activeFolderId={modalFolderId}
+          fileName={modalFileName}
+          fileContent={modalFileContent}
+          isDraft={modalIsDraft}
+          onClose={closeModal}
+          onSave={handleSaveModalFile}
+          onDelete={handleDeleteModalFile}
+          onSetFileName={setModalFileName}
+          onSetFileContent={setModalFileContent}
+          onSetFolderId={setModalFolderId}
         />
       </main>
     </div>
