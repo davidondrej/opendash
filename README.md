@@ -2,6 +2,49 @@
 
 A central dashboard where teams share files and AI agents connect via skills to pull, push, and collaborate.
 
+## Quick Start (Localhost)
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Create local env file:
+```bash
+cp .env.local.example .env.local
+```
+
+3. In Supabase, create a new project and copy:
+- Project URL
+- `anon` key
+- `service_role` key
+
+4. Paste those values into `.env.local`:
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+5. In Supabase SQL Editor, run:
+- `supabase/schema.sql`
+
+6. Start the app:
+```bash
+npm run dev
+```
+
+7. Open:
+- `http://localhost:3000`
+
+## Current Local MVP
+- File manager page with list/search/upload/select
+- API routes:
+  - `GET /api/files`
+  - `POST /api/files`
+  - `GET /api/files/:id`
+  - `PUT /api/files/:id`
+  - `DELETE /api/files/:id`
+
 ## Why OpenDash
 Teams need one place to store prompts, configs, and docs that both humans and agents can use safely. OpenDash provides that shared layer with explicit guardrails for agent behavior.
 
