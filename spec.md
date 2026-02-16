@@ -42,6 +42,33 @@ No single place for teams to share prompts, configs, and files with both humans 
 - See which agents are connected
 - Activity log - what each agent pulled or pushed and when
 
+## Agent API Key System (Critical Path)
+- Every request resolves to a principal: `human` (session auth) or `agent` (API key)
+- Agent auth header: `Authorization: Bearer odak_<secret>`
+- Agent keys are created in Agent Registry and shown only once at creation
+- Store only key hash in DB (never raw key); keep `key_prefix`, `name`, `status`, `created_at`, `last_used_at`, `revoked_at`
+- Key lifecycle in v1: create, rotate (new key + revoke old), revoke, reactivate
+
+### Request Auth Flow
+1. Check human session
+2. If no session, validate agent key
+3. If valid key, attach `actor = { type: "agent", agentId }` to request context
+4. If neither valid, return `401`
+
+### Behavior by Actor Type
+- Humans get raw file content
+- Agents get file content wrapped with project prompt harness
+- All agent write operations are tagged with `agentId` in activity log
+
+### Activity Logging (agent only)
+- Log on every agent request: `agent_id`, `action`, `file_id`, `status_code`, `timestamp`
+- Actions: `files.list`, `files.get`, `files.create`, `files.update`, `files.delete`, `files.search`
+
+### v1 Security Rules
+- Default deny for invalid/missing key
+- Optional v1 rate limit per agent key (recommended)
+- API responses for auth failures: `401 Unauthorized`, revoked key: `403 Forbidden`
+
 ---
 
 ## Auth

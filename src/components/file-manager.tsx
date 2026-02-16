@@ -13,12 +13,12 @@ type FileManagerProps = {
   initialFiles: FileRecord[];
 };
 
-type Department = {
+type Folder = {
   id: string;
   label: string;
 };
 
-const departments: Department[] = [
+const folders: Folder[] = [
   { id: "marketing", label: "Marketing" },
   { id: "product", label: "Product" },
   { id: "sales", label: "Sales" },
@@ -29,18 +29,18 @@ const departments: Department[] = [
   { id: "general", label: "General" },
 ];
 
-function findDepartmentById(id: string) {
-  return departments.find((department) => department.id === id);
+function findFolderById(id: string) {
+  return folders.find((folder) => folder.id === id);
 }
 
-function departmentFromFileName(name: string) {
+function folderFromFileName(name: string) {
   const prefix = name.split("/")[0]?.toLowerCase() ?? "";
-  return findDepartmentById(prefix)?.id ?? "general";
+  return findFolderById(prefix)?.id ?? "general";
 }
 
 function visibleNameFromStoredName(name: string) {
   const segments = name.split("/");
-  if (segments.length > 1 && findDepartmentById(segments[0]?.toLowerCase() ?? "")) {
+  if (segments.length > 1 && findFolderById(segments[0]?.toLowerCase() ?? "")) {
     return segments.slice(1).join("/");
   }
   return name;
@@ -52,9 +52,13 @@ function normalizeMarkdownFileName(name: string) {
   return /\.md$/i.test(base) ? base : `${base}.md`;
 }
 
-function storedNameForDepartment(visibleName: string, departmentId: string) {
+function isMarkdownFileName(name: string) {
+  return /\.(md|markdown)$/i.test(name.trim());
+}
+
+function storedNameForFolder(visibleName: string, folderId: string) {
   const normalized = normalizeMarkdownFileName(visibleName).replace(/^([^/]+)\//, "");
-  return departmentId === "general" ? normalized : `${departmentId}/${normalized}`;
+  return folderId === "general" ? normalized : `${folderId}/${normalized}`;
 }
 
 function escapeHtml(input: string) {
@@ -158,13 +162,42 @@ function markdownToHtml(markdown: string) {
   return html.join("");
 }
 
-function defaultDraftContent(departmentLabel: string) {
-  return `# ${departmentLabel} Notes\n\n## Context\n\n## Decisions\n\n- `;
+function defaultDraftContent(folderLabel: string) {
+  return `# ${folderLabel} Notes\n\n## Context\n\n## Decisions\n\n- `;
+}
+
+function FolderGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-[var(--od-muted)]" aria-hidden="true">
+      <path
+        d="M3 6.75A2.75 2.75 0 0 1 5.75 4h4.1c.78 0 1.53.33 2.05.9l1.15 1.25c.24.26.58.42.94.42h4.26A2.75 2.75 0 0 1 21 9.32v7.93A2.75 2.75 0 0 1 18.25 20H5.75A2.75 2.75 0 0 1 3 17.25V6.75Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FileGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-[var(--od-muted)]" aria-hidden="true">
+      <path
+        d="M7.75 3h6.5l4 4v13.25A1.75 1.75 0 0 1 16.5 22h-8A1.75 1.75 0 0 1 6.75 20.25V4.75A1.75 1.75 0 0 1 8.5 3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M14.25 3v4h4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export default function FileManager({ initialFiles }: FileManagerProps) {
   const [files, setFiles] = useState<FileRecord[]>(initialFiles);
-  const [selectedDepartment, setSelectedDepartment] = useState("marketing");
+  const [selectedFolder, setSelectedFolder] = useState("marketing");
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [editorName, setEditorName] = useState("new-file.md");
   const [editorContent, setEditorContent] = useState(defaultDraftContent("Marketing"));
@@ -184,9 +217,9 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     [],
   );
 
-  const selectedDepartmentLabel = useMemo(
-    () => findDepartmentById(selectedDepartment)?.label ?? "General",
-    [selectedDepartment],
+  const selectedFolderLabel = useMemo(
+    () => findFolderById(selectedFolder)?.label ?? "General",
+    [selectedFolder],
   );
 
   const sortedFiles = useMemo(
@@ -199,10 +232,29 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     [files],
   );
 
-  const departmentFiles = useMemo(
-    () => sortedFiles.filter((file) => departmentFromFileName(file.name) === selectedDepartment),
-    [selectedDepartment, sortedFiles],
+  const folderFiles = useMemo(
+    () => sortedFiles.filter((file) => folderFromFileName(file.name) === selectedFolder),
+    [selectedFolder, sortedFiles],
   );
+  const sortedFolders = useMemo(() => {
+    const markdownCounts = new Map<string, number>();
+    for (const file of files) {
+      if (!isMarkdownFileName(file.name)) continue;
+      const folderId = folderFromFileName(file.name);
+      markdownCounts.set(folderId, (markdownCounts.get(folderId) ?? 0) + 1);
+    }
+
+    return folders
+      .map((folder, index) => ({
+        folder,
+        count: markdownCounts.get(folder.id) ?? 0,
+        index,
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.index - b.index;
+      });
+  }, [files]);
 
   const activeFile = useMemo(
     () => files.find((file) => file.id === selectedFileId) ?? null,
@@ -239,18 +291,18 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     setSelectedFileId(file.id);
     setEditorName(visibleNameFromStoredName(file.name));
     setEditorContent(file.content);
-    setSelectedDepartment(departmentFromFileName(file.name));
+    setSelectedFolder(folderFromFileName(file.name));
     setIsDraft(false);
     setStatus(`Opened ${visibleNameFromStoredName(file.name)}.`);
   }
 
   function startNewFile() {
-    const deptLabel = findDepartmentById(selectedDepartment)?.label ?? "General";
+    const folderLabel = findFolderById(selectedFolder)?.label ?? "General";
     setSelectedFileId(null);
     setEditorName("new-file.md");
-    setEditorContent(defaultDraftContent(deptLabel));
+    setEditorContent(defaultDraftContent(folderLabel));
     setIsDraft(true);
-    setStatus(`New ${deptLabel} draft ready.`);
+    setStatus(`New ${folderLabel} draft ready.`);
   }
 
   async function createFile(fileName: string, fileContent: string) {
@@ -258,7 +310,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: storedNameForDepartment(fileName, selectedDepartment),
+        name: storedNameForFolder(fileName, selectedFolder),
         content: fileContent,
       }),
     });
@@ -272,7 +324,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: storedNameForDepartment(fileName, selectedDepartment),
+        name: storedNameForFolder(fileName, selectedFolder),
         content: fileContent,
       }),
     });
@@ -364,46 +416,35 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <main className="mx-auto grid min-h-screen w-full max-w-[1640px] gap-3 p-3 lg:grid-cols-[72px_300px_1fr] lg:gap-4 lg:p-4">
-        <aside className="od-rail hidden min-h-[760px] flex-col items-center gap-3 py-4 lg:flex">
-          <button type="button" className="od-rail-badge">
-            O
-          </button>
-          <button type="button" className="od-rail-item">
-            D
-          </button>
-          <button type="button" className="od-rail-item">
-            F
-          </button>
-          <button type="button" className="od-rail-item">
-            +
-          </button>
-        </aside>
-
+      <main className="mx-auto grid min-h-screen w-full max-w-[1540px] gap-3 p-3 lg:grid-cols-[300px_1fr] lg:gap-4 lg:p-4">
         <aside className="od-panel flex min-h-[760px] flex-col overflow-hidden">
           <div className="border-b border-[var(--od-border)] px-4 py-4">
             <div className="flex items-center justify-between">
               <h1 className="text-base font-semibold tracking-tight">OpenDash</h1>
               <span className="od-pill">v1</span>
             </div>
-            <p className="mt-1 text-xs text-[var(--od-muted)]">Company departments</p>
+            <p className="mt-1 text-xs text-[var(--od-muted)]">Company folders</p>
           </div>
 
           <div className="px-4 pb-2 pt-3">
-            <p className="od-overline">Departments</p>
+            <p className="od-overline">Folders</p>
             <div className="mt-2 space-y-1">
-              {departments.map((department) => (
+              {sortedFolders.map(({ folder, count }) => (
                 <button
-                  key={department.id}
+                  key={folder.id}
                   type="button"
-                  onClick={() => setSelectedDepartment(department.id)}
-                  className={`od-channel-item w-full text-left ${
-                    selectedDepartment === department.id
+                  onClick={() => setSelectedFolder(folder.id)}
+                  className={`od-channel-item flex w-full items-center justify-between text-left ${
+                    selectedFolder === folder.id
                       ? "border-[var(--od-strong-border)] bg-[var(--od-surface-2)] text-[var(--od-text)]"
                       : ""
                   }`}
                 >
-                  # {department.label.toLowerCase()}
+                  <span className="flex items-center gap-2">
+                    <FolderGlyph />
+                    <span>{folder.label.toLowerCase()}</span>
+                  </span>
+                  <span className="text-xs tabular-nums text-[var(--od-muted)]">{count}</span>
                 </button>
               ))}
             </div>
@@ -425,12 +466,12 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
           </form>
 
           <div className="mt-4 flex items-center justify-between px-4">
-            <p className="od-overline">{selectedDepartmentLabel} Files</p>
-            <p className="text-xs text-[var(--od-muted)]">{departmentFiles.length} total</p>
+            <p className="od-overline">{selectedFolderLabel} Files</p>
+            <p className="text-xs text-[var(--od-muted)]">{folderFiles.length} total</p>
           </div>
 
           <div className="mt-2 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
-            {departmentFiles.map((file) => (
+            {folderFiles.map((file) => (
               <button
                 key={file.id}
                 type="button"
@@ -441,15 +482,20 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
                     : "border-[var(--od-border)] bg-transparent text-[var(--od-soft-text)] hover:bg-[var(--od-surface-2)]"
                 }`}
               >
-                <div className="truncate text-sm font-medium"># {visibleNameFromStoredName(file.name)}</div>
+                <div className="truncate text-sm font-medium">
+                  <span className="inline-flex items-center gap-2">
+                    <FileGlyph />
+                    <span>{visibleNameFromStoredName(file.name)}</span>
+                  </span>
+                </div>
                 <div className="mt-1 truncate text-xs text-[var(--od-muted)]">
                   {dateFormatter.format(new Date(file.updated_at))}
                 </div>
               </button>
             ))}
-            {!departmentFiles.length && (
+            {!folderFiles.length && (
               <p className="px-2 py-3 text-sm text-[var(--od-muted)]">
-                No files in this department yet.
+                No files in this folder yet.
               </p>
             )}
           </div>
@@ -466,8 +512,8 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
 
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--od-border)] px-5 py-4">
             <div>
-              <p className="od-overline">Department</p>
-              <h2 className="text-lg font-semibold tracking-tight">{selectedDepartmentLabel}</h2>
+              <p className="od-overline">Folder</p>
+              <h2 className="text-lg font-semibold tracking-tight">{selectedFolderLabel}</h2>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={startNewFile} className="od-button-ghost" disabled={loading}>
