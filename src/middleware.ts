@@ -29,6 +29,12 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Strip Supabase PKCE ?code= param after exchange to prevent cookie bloat (HTTP 431)
+  if (user && request.nextUrl.searchParams.has("code")) {
+    const cleanUrl = new URL(request.nextUrl.pathname, request.url);
+    return NextResponse.redirect(cleanUrl);
+  }
+
   const pathname = request.nextUrl.pathname;
   if (pathname.startsWith("/api/")) {
     return response;
