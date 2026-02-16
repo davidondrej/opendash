@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type FileRecord = {
   id: string;
@@ -18,32 +18,53 @@ type Folder = {
   label: string;
 };
 
-const folders: Folder[] = [
-  { id: "marketing", label: "Marketing" },
-  { id: "product", label: "Product" },
-  { id: "sales", label: "Sales" },
-  { id: "development", label: "Development" },
-  { id: "operations", label: "Operations" },
-  { id: "finance", label: "Finance" },
-  { id: "hr", label: "HR" },
-  { id: "general", label: "General" },
-];
+const FOLDER_MARKER_FILE = ".opendash-folder.md";
 
-function findFolderById(id: string) {
-  return folders.find((folder) => folder.id === id);
+function normalizeFolderId(name: string) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function folderLabelFromId(id: string) {
+  if (id === "general") return "General";
+  const words = id
+    .split(/[-_]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!words.length) return "General";
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
 function folderFromFileName(name: string) {
-  const prefix = name.split("/")[0]?.toLowerCase() ?? "";
-  return findFolderById(prefix)?.id ?? "general";
+  const normalized = name.trim().replace(/^\/+/, "");
+  const segments = normalized.split("/");
+  if (segments.length < 2) return "general";
+  const prefix = normalizeFolderId(segments[0] ?? "");
+  return prefix || "general";
 }
 
 function visibleNameFromStoredName(name: string) {
-  const segments = name.split("/");
-  if (segments.length > 1 && findFolderById(segments[0]?.toLowerCase() ?? "")) {
+  const normalized = name.trim().replace(/^\/+/, "");
+  const segments = normalized.split("/");
+  if (segments.length > 1) {
     return segments.slice(1).join("/");
   }
-  return name;
+  return normalized;
+}
+
+function markerFileNameForFolder(folderId: string) {
+  return `${folderId}/${FOLDER_MARKER_FILE}`;
+}
+
+function isFolderMarkerFileName(name: string) {
+  return visibleNameFromStoredName(name).toLowerCase() === FOLDER_MARKER_FILE;
+}
+
+function isSystemFileName(name: string) {
+  return isFolderMarkerFileName(name);
 }
 
 function normalizeMarkdownFileName(name: string) {
@@ -197,10 +218,10 @@ function FileGlyph() {
 
 export default function FileManager({ initialFiles }: FileManagerProps) {
   const [files, setFiles] = useState<FileRecord[]>(initialFiles);
-  const [selectedFolder, setSelectedFolder] = useState("marketing");
+  const [selectedFolder, setSelectedFolder] = useState("general");
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [editorName, setEditorName] = useState("new-file.md");
-  const [editorContent, setEditorContent] = useState(defaultDraftContent("Marketing"));
+  const [editorContent, setEditorContent] = useState(defaultDraftContent("General"));
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(`Loaded ${initialFiles.length} file(s).`);
@@ -217,11 +238,6 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     [],
   );
 
-  const selectedFolderLabel = useMemo(
-    () => findFolderById(selectedFolder)?.label ?? "General",
-    [selectedFolder],
-  );
-
   const sortedFiles = useMemo(
     () =>
       [...files].sort((a, b) => {
@@ -232,29 +248,44 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     [files],
   );
 
-  const folderFiles = useMemo(
-    () => sortedFiles.filter((file) => folderFromFileName(file.name) === selectedFolder),
-    [selectedFolder, sortedFiles],
+  const visibleFiles = useMemo(
+    () => sortedFiles.filter((file) => !isSystemFileName(file.name)),
+    [sortedFiles],
   );
+
+  const folderFiles = useMemo(
+    () => visibleFiles.filter((file) => folderFromFileName(file.name) === selectedFolder),
+    [selectedFolder, visibleFiles],
+  );
+
   const sortedFolders = useMemo(() => {
     const markdownCounts = new Map<string, number>();
+    const folderIds = new Set<string>(["general"]);
+
     for (const file of files) {
-      if (!isMarkdownFileName(file.name)) continue;
       const folderId = folderFromFileName(file.name);
+      folderIds.add(folderId);
+      if (isSystemFileName(file.name) || !isMarkdownFileName(file.name)) continue;
       markdownCounts.set(folderId, (markdownCounts.get(folderId) ?? 0) + 1);
     }
 
-    return folders
-      .map((folder, index) => ({
-        folder,
-        count: markdownCounts.get(folder.id) ?? 0,
-        index,
+    return Array.from(folderIds)
+      .map((folderId) => ({
+        folder: { id: folderId, label: folderLabelFromId(folderId) },
+        count: markdownCounts.get(folderId) ?? 0,
       }))
       .sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.index - b.index;
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+        return a.folder.label.localeCompare(b.folder.label);
       });
   }, [files]);
+
+  const selectedFolderLabel = useMemo(
+    () => sortedFolders.find((entry) => entry.folder.id === selectedFolder)?.folder.label ?? "General",
+    [selectedFolder, sortedFolders],
+  );
 
   const activeFile = useMemo(
     () => files.find((file) => file.id === selectedFileId) ?? null,
@@ -262,6 +293,12 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   );
 
   const previewHtml = useMemo(() => markdownToHtml(editorContent), [editorContent]);
+
+  useEffect(() => {
+    if (!sortedFolders.some((entry) => entry.folder.id === selectedFolder)) {
+      setSelectedFolder(sortedFolders[0]?.folder.id ?? "general");
+    }
+  }, [selectedFolder, sortedFolders]);
 
   const loadFiles = useCallback(
     async (query = "") => {
@@ -279,7 +316,8 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
 
         const loadedFiles = data.files ?? [];
         setFiles(loadedFiles);
-        setStatus(`Loaded ${loadedFiles.length} file(s).`);
+        const visibleCount = loadedFiles.filter((file) => !isSystemFileName(file.name)).length;
+        setStatus(`Loaded ${visibleCount} file(s).`);
       } catch {
         setStatus("Failed to load files.");
       }
@@ -297,7 +335,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   }
 
   function startNewFile() {
-    const folderLabel = findFolderById(selectedFolder)?.label ?? "General";
+    const folderLabel = folderLabelFromId(selectedFolder);
     setSelectedFileId(null);
     setEditorName("new-file.md");
     setEditorContent(defaultDraftContent(folderLabel));
