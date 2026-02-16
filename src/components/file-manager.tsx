@@ -104,7 +104,9 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
 
-      const res = await fetch(`/api/files?${params.toString()}`);
+      const res = await fetch(`/api/files?${params.toString()}`, {
+        credentials: "include",
+      });
       const data = (await res.json()) as { files?: FileRecord[]; error?: string };
 
       if (!res.ok) {
@@ -124,6 +126,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   async function createFile(folderId: string, fileName: string, fileContent: string) {
     const res = await fetch("/api/files", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: storedNameForFolder(fileName, folderId),
@@ -138,6 +141,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   async function updateFile(fileId: string, folderId: string, fileName: string, fileContent: string) {
     const res = await fetch(`/api/files/${fileId}`, {
       method: "PUT",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: storedNameForFolder(fileName, folderId),
@@ -157,6 +161,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
 
     const res = await fetch("/api/files", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: markerFileNameForFolder(folderId),
@@ -171,6 +176,7 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   async function renameStoredFile(fileId: string, nextName: string) {
     const res = await fetch(`/api/files/${fileId}`, {
       method: "PUT",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: nextName }),
     });
@@ -179,7 +185,10 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
   }
 
   async function deleteStoredFile(fileId: string) {
-    const res = await fetch(`/api/files/${fileId}`, { method: "DELETE" });
+    const res = await fetch(`/api/files/${fileId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
     const data = (await res.json()) as { ok?: boolean; error?: string };
     if (!res.ok) throw new Error(data.error ?? "Failed to delete file.");
   }

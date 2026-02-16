@@ -5,6 +5,17 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
+function toAuthStatusMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const lowered = message.toLowerCase();
+
+  if (lowered.includes("fetch failed") || lowered.includes("enotfound") || lowered.includes("network")) {
+    return "Cannot reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and your network.";
+  }
+
+  return message || "Authentication failed. Please try again.";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -43,7 +54,7 @@ export default function LoginPage() {
         });
 
         if (error) {
-          setStatus(error.message);
+          setStatus(toAuthStatusMessage(error));
           return;
         }
 
@@ -58,15 +69,15 @@ export default function LoginPage() {
         });
 
         if (error) {
-          setStatus(error.message);
+          setStatus(toAuthStatusMessage(error));
           return;
         }
       }
 
       router.replace(nextPath);
       router.refresh();
-    } catch {
-      setStatus("Authentication failed. Please try again.");
+    } catch (error) {
+      setStatus(toAuthStatusMessage(error));
     } finally {
       setIsSubmitting(false);
     }

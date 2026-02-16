@@ -178,26 +178,13 @@ Full API docs: all endpoints, request/response formats, auth headers, error code
 
 ---
 
-## Step 11: Deploy to Vercel
-
-**Why:** Ship it.
-
-- Connect GitHub repo to Vercel
-- Set environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- Verify build succeeds
-- Test login flow on production URL
-- Test agent connection via skill with production URL
-
----
-
 ## Build Order
 
 ```
 Steps 1-7 (backend + skill) ✅ DONE
   └→ Step 8 (login flow — unblocks dashboard)
        ├→ Step 9 (agent registry UI)
-       ├→ Step 10 (prompt harness UI)
-       └→ Step 11 (deploy to Vercel)
+       └→ Step 10 (prompt harness UI)
 ```
 
 ## Verification
@@ -211,4 +198,3 @@ Steps 1-7 (backend + skill) ✅ DONE
 8. Open dashboard in browser → redirected to login → sign in → file manager works
 9. Navigate to `/agents` → register agent → see key → revoke → verify 403
 10. Navigate to `/settings` → edit harness → verify agent responses change
-11. All of the above on production Vercel URL
