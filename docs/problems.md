@@ -41,3 +41,7 @@ The foundation is solid. To unblock the real roadmap, fix two core issues first:
 2. Align the agents schema to spec.
 
 After that, implementation can move directly through auth, agent skill integration, and completion of v1 goals.
+
+## Status Update
+- Problem 1 (`projects` vs `folders`) has been fixed.
+- Problem 2 (`agents` schema vs spec) has been fixed.

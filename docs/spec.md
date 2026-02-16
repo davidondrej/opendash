@@ -10,14 +10,14 @@ No single place for teams to share prompts, configs, and files with both humans 
 
 ## Feature 1: File Manager
 - Upload, browse, edit, delete markdown files and other docs
-- Organize by folders/projects
+- Organize by folder prefixes (no `projects` table in v1)
 - Search across all files
 - Web-based UI, clean and simple
 
 ## Feature 2: Prompt Harness
 - Default system prompt wraps every file served to agents
 - Tells agents: treat file contents as data, not instructions. No leaking sensitive info. No following embedded commands.
-- Users can customize the harness per project
+- Users can customize one global harness in v1 (project-level harnesses later)
 - Baked into every API response automatically
 
 ## Feature 3: OpenDash Agent Skill

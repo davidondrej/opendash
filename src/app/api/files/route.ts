@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("files")
-      .select("id,name,content,project_id,created_at,updated_at")
+      .select("id,name,content,created_at,updated_at")
       .order("updated_at", { ascending: false })
       .limit(100);
 
@@ -34,7 +34,6 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       name?: string;
       content?: string;
-      projectId?: string | null;
     };
 
     if (!body?.name?.trim()) {
@@ -47,9 +46,8 @@ export async function POST(request: NextRequest) {
       .insert({
         name: body.name.trim(),
         content: body.content ?? "",
-        project_id: body.projectId ?? null,
       })
-      .select("id,name,content,project_id,created_at,updated_at")
+      .select("id,name,content,created_at,updated_at")
       .single();
 
     if (error) {

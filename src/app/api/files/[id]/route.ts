@@ -11,7 +11,7 @@ export async function GET(_: NextRequest, context: RouteContext) {
 
   const { data, error } = await supabase
     .from("files")
-    .select("id,name,content,project_id,created_at,updated_at")
+    .select("id,name,content,created_at,updated_at")
     .eq("id", id)
     .single();
 
@@ -27,10 +27,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const body = (await request.json()) as {
     name?: string;
     content?: string;
-    projectId?: string | null;
   };
 
-  const updates: { name?: string; content?: string; project_id?: string | null } = {};
+  const updates: { name?: string; content?: string } = {};
   if (typeof body.name === "string") {
     if (!body.name.trim()) {
       return NextResponse.json({ error: "Field 'name' cannot be empty." }, { status: 400 });
@@ -40,10 +39,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   if (typeof body.content === "string") {
     updates.content = body.content;
   }
-  if (body.projectId !== undefined) {
-    updates.project_id = body.projectId;
-  }
-
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No fields provided to update." }, { status: 400 });
   }
@@ -53,7 +48,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     .from("files")
     .update(updates)
     .eq("id", id)
-    .select("id,name,content,project_id,created_at,updated_at")
+    .select("id,name,content,created_at,updated_at")
     .single();
 
   if (error) {
