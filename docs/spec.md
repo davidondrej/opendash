@@ -39,12 +39,14 @@ No single place for teams to share prompts, configs, and files with both humans 
 ## Feature 5: Agent Registry
 - Register agents in the dashboard
 - Each agent gets a unique API key
+- Each agent must declare its runtime name (for example: `Claude Code`, `AgentZero`, `OpenCode`, `OpenClaw`, `Codex`)
 - See which agents are connected
 - Activity log - what each agent pulled or pushed and when
 
 ## Agent API Key System (Critical Path)
 - Every request resolves to a principal: `human` (session auth) or `agent` (API key)
 - Agent auth header: `Authorization: Bearer odak_<secret>`
+- Agent identity header (required on all agent API calls): `X-OpenDash-Agent-Name: <agent runtime name>`
 - Agent keys are created in Agent Registry and shown only once at creation
 - Store only key hash in DB (never raw key); keep `key_prefix`, `name`, `status`, `created_at`, `last_used_at`, `revoked_at`
 - Key lifecycle in v1: create, rotate (new key + revoke old), revoke, reactivate
@@ -52,8 +54,9 @@ No single place for teams to share prompts, configs, and files with both humans 
 ### Request Auth Flow
 1. Check human session
 2. If no session, validate agent key
-3. If valid key, attach `actor = { type: "agent", agentId }` to request context
-4. If neither valid, return `401`
+3. If valid key, require non-empty `X-OpenDash-Agent-Name` (otherwise `400`)
+4. If valid key + agent name, attach `actor = { type: "agent", agentId, agentName }` to request context
+5. If neither valid, return `401`
 
 ### Behavior by Actor Type
 - Humans get raw file content
@@ -61,8 +64,9 @@ No single place for teams to share prompts, configs, and files with both humans 
 - All agent write operations are tagged with `agentId` in activity log
 
 ### Activity Logging (agent only)
-- Log on every agent request: `agent_id`, `action`, `file_id`, `status_code`, `timestamp`
+- Log on every agent request: `agent_id`, `agent_name`, `action`, `file_id`, `file_name`, `status_code`, `timestamp`
 - Actions: `files.list`, `files.get`, `files.create`, `files.update`, `files.delete`, `files.search`
+- MVP observability requirement: must be easy to answer `which agent accessed which file` and `which agent uploaded/created which file`
 
 ### v1 Security Rules
 - Default deny for invalid/missing key
