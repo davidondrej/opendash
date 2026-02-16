@@ -121,43 +121,84 @@ Full API docs: all endpoints, request/response formats, auth headers, error code
 
 ---
 
+## Step 8: Human Login Flow
+
+**Why:** After Step 5, the dashboard is broken — every API call returns 401 because there's no human session. This unblocks the UI.
+
+**New files:**
+
+### `/src/app/login/page.tsx` — Login page
+- Email + password form using Supabase Auth (`signInWithPassword`)
+- Redirect to `/` on success
+- Sign-up link/toggle for first-time users
+- Minimal styling using existing design system (`od-input`, `od-button-primary`)
+
+### `/src/middleware.ts` — Next.js middleware
+- Refresh Supabase session on every request (standard `@supabase/ssr` pattern)
+- Redirect unauthenticated users to `/login` (except `/login` itself and `/api/*` routes)
+- API routes are NOT redirected — they return 401 via `resolveActor` as-is
+
+**Modify:** `/src/app/layout.tsx`
+- Add logout button/link to header
+
+**Modify:** `/src/components/file-manager.tsx`
+- Ensure `fetch('/api/files')` calls include credentials (cookies sent automatically on same-origin, but verify)
+
+---
+
+## Step 9: Agent Registry UI
+
+**Why:** Humans need a dashboard page to register agents, view connected agents, revoke keys, and see activity — not just raw API calls.
+
+**New files:**
+
+### `/src/app/agents/page.tsx` — Agent management page
+- List all registered agents (name, key prefix, status, last used)
+- "Register Agent" button → modal/form → calls `POST /api/agents` → shows raw key once with copy button
+- Revoke button per agent → calls `DELETE /api/agents/:id`
+- Rotate key button → calls `POST /api/agents/:id/rotate` → shows new key once
+- Click agent row → expand to show activity log (calls `GET /api/agents/:id/activity`)
+
+**Modify:** `/src/app/layout.tsx` or add navigation
+- Add nav link to `/agents` page from main dashboard
+
+---
+
+## Step 10: Prompt Harness UI
+
+**Why:** Humans need a way to view and edit the prompt harness from the dashboard, not via API.
+
+**New file:**
+
+### `/src/app/settings/page.tsx` — Settings page
+- Display current prompt harness text in editable textarea
+- Save button → calls `PUT /api/harness`
+- Show default harness text as placeholder
+- Nav link from main dashboard
+
+---
+
+## Step 11: Deploy to Vercel
+
+**Why:** Ship it.
+
+- Connect GitHub repo to Vercel
+- Set environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- Verify build succeeds
+- Test login flow on production URL
+- Test agent connection via skill with production URL
+
+---
+
 ## Build Order
 
 ```
-Step 1 (schema + project_id cleanup)
-  └→ Step 2 (auth infrastructure)
-       ├→ Step 3 (activity logging)
-       ├→ Step 4 (prompt harness)
-       ├→ Step 5 (update file routes — depends on 2, 3, 4)
-       ├→ Step 6 (agent registry)
-       └→ Step 7 (skill folder — last, documents final API)
+Steps 1-7 (backend + skill) ✅ DONE
+  └→ Step 8 (login flow — unblocks dashboard)
+       ├→ Step 9 (agent registry UI)
+       ├→ Step 10 (prompt harness UI)
+       └→ Step 11 (deploy to Vercel)
 ```
-
-## New Files (14 total)
-| File | Purpose |
-|---|---|
-| `supabase/migration-v2.sql` | DB migration |
-| `src/lib/supabase-server.ts` | Cookie-based Supabase client |
-| `src/lib/auth.ts` | Core auth resolver |
-| `src/lib/api-key.ts` | Key generation + hashing |
-| `src/lib/activity-log.ts` | Agent activity logger |
-| `src/lib/prompt-harness.ts` | Harness fetch/wrap |
-| `src/app/api/harness/route.ts` | Harness CRUD endpoint |
-| `src/app/api/agents/route.ts` | Agent list + register |
-| `src/app/api/agents/[id]/route.ts` | Agent detail + revoke |
-| `src/app/api/agents/[id]/activity/route.ts` | Agent activity log |
-| `src/app/api/agents/[id]/rotate/route.ts` | Key rotation |
-| `opendash-skill/SKILL.md` | Skill metadata |
-| `opendash-skill/scripts/api.sh` | Curl commands |
-| `opendash-skill/references/schema.md` | API docs |
-
-## Modified Files (4)
-| File | Change |
-|---|---|
-| `supabase/schema.sql` | Rewrite canonical schema |
-| `src/lib/supabase-admin.ts` | Remove `project_id` from FileRecord |
-| `src/app/api/files/route.ts` | Remove project_id, add auth + logging |
-| `src/app/api/files/[id]/route.ts` | Remove project_id, add auth + logging + harness |
 
 ## Verification
 1. Run `migration-v2.sql` against Supabase, confirm tables updated
@@ -167,3 +208,7 @@ Step 1 (schema + project_id cleanup)
 5. `curl GET /api/files/:id` as agent → content wrapped with harness
 6. Check `/api/agents/:id/activity` → see logged requests
 7. Drop `opendash-skill/` into an agent workspace, set env vars, confirm agent can list/read/write files
+8. Open dashboard in browser → redirected to login → sign in → file manager works
+9. Navigate to `/agents` → register agent → see key → revoke → verify 403
+10. Navigate to `/settings` → edit harness → verify agent responses change
+11. All of the above on production Vercel URL
