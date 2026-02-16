@@ -91,6 +91,51 @@ body {
     color: var(--od-text);
   }
 
+  .od-sidebar-section {
+    @apply rounded-xl border p-3;
+    border-color: var(--od-border);
+    background: linear-gradient(180deg, rgba(31, 32, 36, 0.75), rgba(27, 28, 32, 0.7));
+  }
+
+  .od-sidebar-section-head {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .od-sidebar-action {
+    @apply rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:opacity-50;
+    border-color: var(--od-border);
+    background: rgba(37, 38, 43, 0.8);
+    color: var(--od-soft-text);
+  }
+
+  .od-sidebar-action:hover {
+    background: var(--od-surface-3);
+    color: var(--od-text);
+  }
+
+  .od-sidebar-action-danger:hover {
+    border-color: #665157;
+    color: #f0ccd5;
+    background: rgba(86, 54, 63, 0.42);
+  }
+
+  .od-folder-row {
+    @apply flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition;
+    border-color: var(--od-border);
+    background: rgba(28, 29, 33, 0.65);
+  }
+
+  .od-folder-row:hover {
+    background: var(--od-surface-2);
+  }
+
+  .od-count-pill {
+    @apply min-w-7 rounded-md border px-2 py-0.5 text-center text-xs tabular-nums;
+    border-color: var(--od-border);
+    color: var(--od-muted);
+    background: rgba(33, 34, 39, 0.7);
+  }
+
   .od-channel-item {
     @apply rounded-lg border px-2.5 py-1.5 text-sm transition;
     border-color: transparent;

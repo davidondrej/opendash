@@ -371,6 +371,49 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     return data.file ?? null;
   }
 
+  async function createFolder(folderName: string) {
+    const folderId = normalizeFolderId(folderName);
+    if (!folderId) {
+      throw new Error("Folder name must contain letters or numbers.");
+    }
+    if (folderId === "general") {
+      throw new Error("The general folder already exists.");
+    }
+    if (sortedFolders.some((entry) => entry.folder.id === folderId)) {
+      throw new Error("Folder already exists.");
+    }
+
+    const res = await fetch("/api/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: markerFileNameForFolder(folderId),
+        content: `# ${folderLabelFromId(folderId)}\n`,
+      }),
+    });
+    const data = (await res.json()) as { file?: FileRecord; error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Failed to create folder.");
+    return folderId;
+  }
+
+  async function renameStoredFile(fileId: string, nextName: string) {
+    const res = await fetch(`/api/files/${fileId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    });
+    const data = (await res.json()) as { file?: FileRecord; error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Failed to rename files in folder.");
+  }
+
+  async function deleteStoredFile(fileId: string) {
+    const res = await fetch(`/api/files/${fileId}`, {
+      method: "DELETE",
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Failed to delete files in folder.");
+  }
+
   async function handleSaveFile() {
     setLoading(true);
     setStatus(isDraft ? "Creating file..." : "Saving changes...");
@@ -452,90 +495,232 @@ export default function FileManager({ initialFiles }: FileManagerProps) {
     }
   }
 
+  async function handleCreateFolder() {
+    const input = window.prompt("New folder name");
+    if (input === null) return;
+
+    setLoading(true);
+    setStatus("Creating folder...");
+    try {
+      const folderId = await createFolder(input);
+      await loadFiles(search);
+      setSelectedFolder(folderId);
+      setSelectedFileId(null);
+      setEditorName("new-file.md");
+      setEditorContent(defaultDraftContent(folderLabelFromId(folderId)));
+      setIsDraft(true);
+      setStatus(`Created folder ${folderLabelFromId(folderId)}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create folder.";
+      setStatus(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRenameFolder() {
+    if (selectedFolder === "general") {
+      setStatus("General folder cannot be renamed.");
+      return;
+    }
+
+    const nextNameInput = window.prompt("Rename folder", folderLabelFromId(selectedFolder));
+    if (nextNameInput === null) return;
+    const nextFolderId = normalizeFolderId(nextNameInput);
+
+    if (!nextFolderId) {
+      setStatus("Folder name must contain letters or numbers.");
+      return;
+    }
+    if (nextFolderId === selectedFolder) {
+      setStatus("Folder name is unchanged.");
+      return;
+    }
+    if (sortedFolders.some((entry) => entry.folder.id === nextFolderId)) {
+      setStatus("A folder with that name already exists.");
+      return;
+    }
+
+    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === selectedFolder);
+    if (!filesInFolder.length) {
+      setStatus("This folder has no files to rename.");
+      return;
+    }
+
+    setLoading(true);
+    setStatus("Renaming folder...");
+    try {
+      for (const file of filesInFolder) {
+        const nextName = storedNameForFolder(visibleNameFromStoredName(file.name), nextFolderId);
+        await renameStoredFile(file.id, nextName);
+      }
+      await loadFiles(search);
+      setSelectedFolder(nextFolderId);
+      setStatus(`Renamed folder to ${folderLabelFromId(nextFolderId)}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to rename folder.";
+      setStatus(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDeleteFolder() {
+    if (selectedFolder === "general") {
+      setStatus("General folder cannot be deleted.");
+      return;
+    }
+
+    const filesInFolder = files.filter((file) => folderFromFileName(file.name) === selectedFolder);
+    const userFilesInFolder = filesInFolder.filter((file) => !isSystemFileName(file.name));
+    const confirmed = window.confirm(
+      `Delete folder "${folderLabelFromId(selectedFolder)}" and ${userFilesInFolder.length} file(s)? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    const deletedSelectedFile = filesInFolder.some((file) => file.id === selectedFileId);
+
+    setLoading(true);
+    setStatus("Deleting folder...");
+    try {
+      for (const file of filesInFolder) {
+        await deleteStoredFile(file.id);
+      }
+      await loadFiles(search);
+      setSelectedFolder("general");
+      if (deletedSelectedFile) {
+        setSelectedFileId(null);
+        setEditorName("new-file.md");
+        setEditorContent(defaultDraftContent("General"));
+        setIsDraft(true);
+      }
+      setStatus(`Deleted folder ${folderLabelFromId(selectedFolder)}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete folder.";
+      setStatus(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <main className="mx-auto grid min-h-screen w-full max-w-[1540px] gap-3 p-3 lg:grid-cols-[300px_1fr] lg:gap-4 lg:p-4">
         <aside className="od-panel flex min-h-[760px] flex-col overflow-hidden">
-          <div className="border-b border-[var(--od-border)] px-4 py-4">
+          <div className="border-b border-[var(--od-border)] px-5 py-5">
             <div className="flex items-center justify-between">
-              <h1 className="text-base font-semibold tracking-tight">OpenDash</h1>
+              <h1 className="text-[2rem] font-semibold tracking-tight">OpenDash</h1>
               <span className="od-pill">v1</span>
             </div>
-            <p className="mt-1 text-xs text-[var(--od-muted)]">Company folders</p>
+            <p className="mt-2 text-sm text-[var(--od-muted)]">Company folders</p>
           </div>
 
-          <div className="px-4 pb-2 pt-3">
-            <p className="od-overline">Folders</p>
-            <div className="mt-2 space-y-1">
-              {sortedFolders.map(({ folder, count }) => (
+          <div className="flex flex-1 flex-col gap-3 px-3 pb-3 pt-3">
+            <section className="od-sidebar-section">
+              <div className="od-sidebar-section-head">
+                <p className="od-overline">Folders</p>
                 <button
-                  key={folder.id}
                   type="button"
-                  onClick={() => setSelectedFolder(folder.id)}
-                  className={`od-channel-item flex w-full items-center justify-between text-left ${
-                    selectedFolder === folder.id
-                      ? "border-[var(--od-strong-border)] bg-[var(--od-surface-2)] text-[var(--od-text)]"
-                      : ""
-                  }`}
+                  onClick={handleCreateFolder}
+                  disabled={loading}
+                  className="od-sidebar-action"
                 >
-                  <span className="flex items-center gap-2">
-                    <FolderGlyph />
-                    <span>{folder.label.toLowerCase()}</span>
-                  </span>
-                  <span className="text-xs tabular-nums text-[var(--od-muted)]">{count}</span>
+                  New Folder
                 </button>
-              ))}
-            </div>
-          </div>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {sortedFolders.map(({ folder, count }) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => setSelectedFolder(folder.id)}
+                    className={`od-folder-row ${
+                      selectedFolder === folder.id
+                        ? "border-[var(--od-strong-border)] bg-[var(--od-surface-3)] text-[var(--od-text)]"
+                        : "text-[var(--od-soft-text)]"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <FolderGlyph />
+                      <span className="truncate">{folder.label}</span>
+                    </span>
+                    <span className="od-count-pill">{count}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
 
-          <div className="px-4 pb-2 pt-2">
-            <p className="od-overline">Search</p>
-          </div>
-          <form className="mt-4 flex gap-2" onSubmit={handleSearch}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search files"
-              className="od-input ml-4"
-            />
-            <button type="submit" className="od-button-ghost mr-4 px-3">
-              Find
-            </button>
-          </form>
+            <section className="od-sidebar-section">
+              <p className="od-overline">Search</p>
+              <form className="mt-2 flex gap-2" onSubmit={handleSearch}>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search files"
+                  className="od-input flex-1"
+                />
+                <button type="submit" className="od-button-ghost px-3">
+                  Find
+                </button>
+              </form>
+            </section>
 
-          <div className="mt-4 flex items-center justify-between px-4">
-            <p className="od-overline">{selectedFolderLabel} Files</p>
-            <p className="text-xs text-[var(--od-muted)]">{folderFiles.length} total</p>
-          </div>
-
-          <div className="mt-2 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
-            {folderFiles.map((file) => (
-              <button
-                key={file.id}
-                type="button"
-                onClick={() => openFile(file)}
-                className={`od-file-item w-full px-3 py-2.5 text-left ${
-                  selectedFileId === file.id
-                    ? "border-[var(--od-strong-border)] bg-[var(--od-surface-3)] text-[var(--od-text)]"
-                    : "border-[var(--od-border)] bg-transparent text-[var(--od-soft-text)] hover:bg-[var(--od-surface-2)]"
-                }`}
-              >
-                <div className="truncate text-sm font-medium">
-                  <span className="inline-flex items-center gap-2">
-                    <FileGlyph />
-                    <span>{visibleNameFromStoredName(file.name)}</span>
-                  </span>
+            <section className="od-sidebar-section flex min-h-0 flex-1 flex-col">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="od-overline">{selectedFolderLabel} Files</p>
+                  <p className="mt-1 text-xs text-[var(--od-muted)]">{folderFiles.length} total</p>
                 </div>
-                <div className="mt-1 truncate text-xs text-[var(--od-muted)]">
-                  {dateFormatter.format(new Date(file.updated_at))}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleRenameFolder}
+                    disabled={loading || selectedFolder === "general"}
+                    className="od-sidebar-action"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteFolder}
+                    disabled={loading || selectedFolder === "general"}
+                    className="od-sidebar-action od-sidebar-action-danger"
+                  >
+                    Delete
+                  </button>
                 </div>
-              </button>
-            ))}
-            {!folderFiles.length && (
-              <p className="px-2 py-3 text-sm text-[var(--od-muted)]">
-                No files in this folder yet.
-              </p>
-            )}
+              </div>
+
+              <div className="mt-3 flex-1 space-y-1.5 overflow-y-auto">
+                {folderFiles.map((file) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    onClick={() => openFile(file)}
+                    className={`od-file-item w-full px-3 py-2.5 text-left ${
+                      selectedFileId === file.id
+                        ? "border-[var(--od-strong-border)] bg-[var(--od-surface-3)] text-[var(--od-text)]"
+                        : "border-[var(--od-border)] bg-transparent text-[var(--od-soft-text)] hover:bg-[var(--od-surface-2)]"
+                    }`}
+                  >
+                    <div className="truncate text-sm font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        <FileGlyph />
+                        <span>{visibleNameFromStoredName(file.name)}</span>
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-[var(--od-muted)]">
+                      {dateFormatter.format(new Date(file.updated_at))}
+                    </div>
+                  </button>
+                ))}
+                {!folderFiles.length && (
+                  <div className="rounded-xl border border-dashed border-[var(--od-border)] bg-[var(--od-surface-2)] px-3 py-4 text-sm text-[var(--od-muted)]">
+                    No files in this folder yet.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </aside>
 
