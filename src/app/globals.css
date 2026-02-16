@@ -1,26 +1,155 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1a1b1e;
+  --foreground: #e2e2e4;
+  --od-rail: #16171a;
+  --od-surface-1: #1d1f23;
+  --od-surface-2: #23252a;
+  --od-surface-3: #2b2d33;
+  --od-border: #33363d;
+  --od-strong-border: #4a4e58;
+  --od-text: #e2e2e4;
+  --od-soft-text: #c8c9cd;
+  --od-muted: #9a9ea7;
+  --od-accent: #51545d;
+  --od-shadow: 0 20px 34px rgba(0, 0, 0, 0.28);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-sans: "Manrope", "Avenir Next", "Segoe UI Variable Text", "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--od-border);
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(95, 98, 108, 0.16) 0, rgba(95, 98, 108, 0) 34%),
+    radial-gradient(circle at 88% 16%, rgba(75, 77, 85, 0.1) 0, rgba(75, 77, 85, 0) 28%),
+    linear-gradient(180deg, #1b1c1f 0%, #191a1d 60%);
+  color: var(--od-text);
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+}
+
+::selection {
+  background: rgba(90, 93, 103, 0.34);
+  color: #f3f4f5;
+}
+
+@layer components {
+  .od-rail {
+    @apply rounded-2xl border;
+    border-color: var(--od-border);
+    background: linear-gradient(180deg, #16171a, #17181b);
+    box-shadow: var(--od-shadow);
+  }
+
+  .od-rail-badge {
+    @apply flex h-11 w-11 items-center justify-center rounded-xl border text-sm font-semibold transition;
+    border-color: var(--od-strong-border);
+    background: var(--od-surface-3);
+    color: var(--od-text);
+  }
+
+  .od-rail-item {
+    @apply flex h-10 w-10 items-center justify-center rounded-xl border text-xs font-semibold transition;
+    border-color: var(--od-border);
+    background: var(--od-surface-1);
+    color: var(--od-muted);
+  }
+
+  .od-rail-item:hover {
+    border-color: var(--od-strong-border);
+    background: var(--od-surface-3);
+    color: var(--od-text);
+  }
+
+  .od-panel {
+    @apply rounded-2xl border;
+    background: linear-gradient(180deg, rgba(33, 35, 40, 0.95), rgba(28, 30, 35, 0.95));
+    box-shadow: var(--od-shadow);
+  }
+
+  .od-input {
+    @apply rounded-xl border px-3 py-2.5 text-sm outline-none transition;
+    background: var(--od-surface-2);
+    color: var(--od-text);
+  }
+
+  .od-input::placeholder {
+    color: var(--od-muted);
+  }
+
+  .od-input:focus {
+    border-color: var(--od-strong-border);
+    box-shadow: 0 0 0 1px rgba(94, 98, 109, 0.65);
+  }
+
+  .od-button-primary {
+    @apply rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-60;
+    background: linear-gradient(180deg, #5c5f69 0%, #494c55 100%);
+    color: #f0f1f2;
+  }
+
+  .od-button-primary:hover {
+    filter: brightness(1.09);
+  }
+
+  .od-button-ghost {
+    @apply rounded-xl border px-3 py-2 text-sm font-medium transition;
+    border-color: var(--od-border);
+    background: var(--od-surface-2);
+    color: var(--od-soft-text);
+  }
+
+  .od-button-ghost:hover {
+    background: var(--od-surface-3);
+    color: var(--od-text);
+  }
+
+  .od-channel-item {
+    @apply rounded-lg border px-2.5 py-1.5 text-sm transition;
+    border-color: transparent;
+    color: var(--od-muted);
+  }
+
+  .od-channel-item:hover {
+    border-color: var(--od-border);
+    background: var(--od-surface-2);
+    color: var(--od-soft-text);
+  }
+
+  .od-file-item {
+    @apply rounded-xl border transition;
+  }
+
+  .od-message {
+    @apply flex items-start gap-3 rounded-2xl border p-4;
+    border-color: var(--od-border);
+    background: var(--od-surface-1);
+  }
+
+  .od-overline {
+    @apply text-xs font-semibold uppercase tracking-[0.12em];
+    color: var(--od-muted);
+  }
+
+  .od-pill {
+    @apply rounded-full border px-2.5 py-1 text-[11px] font-medium;
+    border-color: var(--od-border);
+    background: rgba(101, 104, 114, 0.2);
+    color: var(--od-soft-text);
+  }
 }
